@@ -3,12 +3,20 @@ module Market = A2.Market
 module Order = A2.Order
 module Portfolio = A2.Portfolio
 
+(** [get_ok result] extracts an [Ok] value or fails the OUnit assertion with the
+    message carried by [Error]. *)
 let get_ok = function
   | Ok value -> value
   | Error message -> assert_failure message
 
+(** [create cash] constructs a test portfolio with positive initial cents,
+    failing the assertion if creation returns an error. *)
 let create cash = get_ok (Portfolio.create cash)
 
+(** [assert_state portfolio prices cash holdings value] checks the expected
+    cash, share counts, and total value through public operations. Monetary
+    expectations and [prices] are cents; [prices] must cover every held
+    security. *)
 let assert_state portfolio prices cash holdings value =
   assert_equal ~msg:"cash" ~printer:string_of_int cash
     (Portfolio.cash portfolio);
@@ -24,6 +32,8 @@ let assert_state portfolio prices cash holdings value =
   assert_equal ~msg:"portfolio value" ~printer:string_of_int value
     (get_ok (Portfolio.value portfolio prices))
 
+(** Checks positive initial cash, empty holdings, absent-security lookup, and
+    rejection of nonpositive starting cash. *)
 let initial_test _ =
   let portfolio = create 10003 in
   assert_state portfolio [] 10003 [] 10003;
@@ -37,6 +47,8 @@ let initial_test _ =
           assert_failure "Expected nonpositive initial cash to be rejected")
     [ 0; -1 ]
 
+(** Checks accumulating purchases in exact cents and preservation of earlier
+    portfolio snapshots. *)
 let buy_test _ =
   let prices = [ ("XYZ", 1705) ] in
   let initial = create 10000 in
@@ -53,6 +65,8 @@ let buy_test _ =
   assert_state initial prices 10000 [] 10000;
   assert_state bought prices 4885 [ ("XYZ", 3) ] 10000
 
+(** Checks partial and complete sales at current prices, removal of zero
+    holdings, and immutable earlier states. *)
 let sell_test _ =
   let bought, _ =
     Portfolio.apply_order (create 10000)
@@ -73,6 +87,9 @@ let sell_test _ =
   assert_equal 0 (Portfolio.shares liquidated "XYZ");
   assert_state bought prices 5000 [ ("XYZ", 4) ] 11000
 
+(** [rejection_test order reason] checks that [order] produces the expected
+    rejection [reason] and preserves the test portfolio's cash, holdings, and
+    value. *)
 let rejection_test order reason _ =
   let prices = [ ("XYZ", 1000) ] in
   let portfolio, _ =
@@ -83,6 +100,9 @@ let rejection_test order reason _ =
   assert_state rejected prices 8000 [ ("XYZ", 2) ] 10000;
   assert_state portfolio prices 8000 [ ("XYZ", 2) ] 10000
 
+(** [funding_test reversed] checks a sale-funded purchase, or its
+    purchase-before-sale ordering when [reversed] is true, against explicit
+    expected outcomes and states. *)
 let funding_test reversed _ =
   let bought, _ =
     Portfolio.apply_order (create 1000)
@@ -103,6 +123,8 @@ let funding_test reversed _ =
     assert_state final prices 0 [ ("B", 3) ] 1200);
   assert_state bought prices 0 [ ("A", 1) ] 1200
 
+(** Checks that each rejection reason preserves the account while later valid
+    orders still execute in sequence. *)
 let continue_after_rejection_test _ =
   let prices = [ ("XYZ", 1000) ] in
   let final, outcomes =
@@ -130,12 +152,16 @@ let continue_after_rejection_test _ =
     outcomes;
   assert_state final prices 500 [ ("XYZ", 2) ] 2500
 
+(** Checks that processing no orders returns no outcomes and preserves the
+    starting account. *)
 let empty_orders_test _ =
   let initial = create 10000 in
   let final, outcomes = Portfolio.apply_orders initial [] [] in
   assert_equal [] outcomes;
   assert_state final [] 10000 [] 10000
 
+(** Checks that valuation reports a missing held-security price and leaves the
+    portfolio unchanged. *)
 let missing_valuation_price_test _ =
   let portfolio, _ =
     Portfolio.apply_order (create 10000)
@@ -146,6 +172,8 @@ let missing_valuation_price_test _ =
     (Portfolio.value portfolio [ ("OTHER", 500) ]);
   assert_state portfolio [ ("XYZ", 1500) ] 8000 [ ("XYZ", 2) ] 11000
 
+(** Checks every dated portfolio transition and order outcome from the supplied
+    Accounting Reference using Market and Portfolio. *)
 let accounting_reference_test _ =
   let market = get_ok (Market.load "../data/handout.csv") in
   let scenarios =
@@ -179,6 +207,8 @@ let accounting_reference_test _ =
          next)
        (create 10000) (Market.rows market) scenarios)
 
+(** Checks a separate hand-calculated, multi-date account with exact cents,
+    multiple securities, and a rejected purchase followed by a sale. *)
 let independent_accounting_test _ =
   let first_prices = [ ("ZED", 333); ("Q7", 1250) ] in
   let first, outcomes =

@@ -13,6 +13,12 @@ type t = {
   options : (string * string) list;
 }
 
+(** [parse ()] parses [Sys.argv] once with [BatOptParse]. Checks exactly three
+    positional arguments, a recognized strategy, and a required positive
+    two-decimal cash amount before any market file is opened. Options use names
+    without dashes. Built-in [-h]/[--help] prints help and exits successfully.
+    Invalid arguments print usage and a specific error, then exit
+    unsuccessfully. *)
 let parse () =
   let parser =
     OptParser.make

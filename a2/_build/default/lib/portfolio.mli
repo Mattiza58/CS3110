@@ -7,8 +7,9 @@ type t
     hidden. *)
 
 val create : int -> (t, string) result
-(** [create initial_cash] starts with no shares. Returns [Error message] when
-    [initial_cash] is not strictly positive. *)
+(** [create initial_cash] starts a portfolio with [initial_cash] cents and no
+    shares. Returns [Error message] when [initial_cash] is not strictly
+    positive. *)
 
 val cash : t -> int
 (** [cash portfolio] is the available cash in cents. *)

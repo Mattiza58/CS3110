@@ -1,11 +1,15 @@
 open OUnit2
 module Market = A2.Market
 
+(** [load filename] loads a valid market CSV for a test, failing the OUnit
+    assertion if loading returns an error. *)
 let load filename =
   match Market.load filename with
   | Ok market -> market
   | Error message -> assert_failure message
 
+(** [with_csv contents test] writes [contents] to a temporary CSV, calls [test]
+    with its filename, and removes the file even if the callback fails. *)
 let with_csv contents test =
   let filename = Filename.temp_file "a2-market-" ".csv" in
   Fun.protect
@@ -17,6 +21,8 @@ let with_csv contents test =
         (fun () -> output_string channel contents);
       test filename)
 
+(** Checks every handout date, header name, and exact cent price through the
+    Market interface. *)
 let handout_test _ =
   let market = load "../data/handout.csv" in
   assert_equal [ "ALFA"; "BETA" ] (Market.securities market);
@@ -29,6 +35,8 @@ let handout_test _ =
       ]
     (Market.rows market)
 
+(** Checks all five SPY rows, including their dates and exact integer-cent
+    prices. *)
 let spy_test _ =
   let market = load "../data/small-spy-5days.csv" in
   assert_equal [ "SPY" ] (Market.securities market);
@@ -44,6 +52,8 @@ let spy_test _ =
        (fun (row : Market.row) -> (row.date, row.prices))
        (Market.rows market))
 
+(** Checks header order, fractional-dollar prices, gaps between dates, and CRLF
+    line endings on a valid temporary market. *)
 let cents_and_order_test _ =
   with_csv
     "date,ZED,Q7,AAA\r\n\
@@ -65,6 +75,7 @@ let cents_and_order_test _ =
           ]
         (Market.rows market))
 
+(** Checks a single-security, single-date file without a trailing newline. *)
 let one_row_test _ =
   with_csv "date,ONLY\n2024-01-02,1.00" (fun filename ->
       let market = load filename in
@@ -73,6 +84,10 @@ let one_row_test _ =
         Market.[ { date = "2024-01-02"; prices = [ ("ONLY", 100) ] } ]
         (Market.rows market))
 
+(** [historical_test filename security_count row_count first_date first_price]
+    checks those independently supplied expectations and each row's header
+    associations. Requires a nonempty valid market at [filename]; prices are
+    cents. *)
 let historical_test filename security_count row_count first_date first_price _ =
   let market = load filename in
   assert_equal security_count (List.length (Market.securities market));
@@ -86,6 +101,8 @@ let historical_test filename security_count row_count first_date first_price _ =
       assert_equal (Market.securities market) (List.map fst row.prices))
     rows
 
+(** Checks that a nonexistent market filename produces an error identifying that
+    file. *)
 let missing_file_test _ =
   with_csv "" (fun filename ->
       let missing = filename ^ ".missing" in

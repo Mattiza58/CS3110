@@ -4,7 +4,8 @@
 
 (cram enable)
 
-(generate_opam_files true)
+; Maintain a2.opam directly with only the assignment's dependencies and targets.
+(generate_opam_files false)
 
 (source
  (github username/reponame))

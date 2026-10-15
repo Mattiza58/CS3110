@@ -2,9 +2,10 @@
     portfolio values. *)
 
 val render : Backtest.t -> string
-(** Render the complete final summary, including strategy, period, initial cash,
-    final cash, positive holdings, final value, and percentage return. Money and
-    return have two decimal places. The string ends with a newline. No I/O. *)
+(** [render result] is the complete final summary, including strategy, period,
+    initial cash, final cash, positive holdings, final value, and percentage
+    return. Money and return have two decimal places. The string ends with a
+    newline. No I/O. *)
 
 val write : string -> Backtest.t -> (unit, string) result
 (** [write filename result] writes the exact [date,value] header and one row per

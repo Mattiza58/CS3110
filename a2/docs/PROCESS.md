@@ -163,6 +163,11 @@ output now complete the planned path. Money parsing was tightened when adding
 command-line validation so signed, underscored, malformed, and overflowing
 amounts cannot reach the accounting code; valid market prices are unaffected.
 
+The later programming-guidelines review extracted observation construction,
+date advancement, and result summarization from Backtest's long entry-point
+function. These helpers remain private. The existing independent expected states,
+order outcomes, summaries, and CSVs all passed after this readability revision.
+
 ## Market reader validation
 
 Implemented `Market.load`, `Market.securities`, and `Market.rows`. The market
@@ -432,3 +437,50 @@ The Cram files are `reports.t`, `errors.t`, and `help.t`. Test fixtures are
 declared in `test/dune` so Dune makes them available in its test sandbox.
 All OCaml sources pass the project's `ocamlformat` configuration. No production
 implementation changes were needed to pass the R7 audit.
+
+## Programming Guidelines review: general principles and A2
+
+Read all four pages of the Programming Guidelines PDF added under
+`General Instructions`, applying the general principles and the A2-specific
+requirements to this project. No A0 or A1 project files were changed.
+
+- **Function specifications:** followed the preferred A2 convention of keeping
+  public specifications in both `.ml` and `.mli` files. Added OCamldoc above
+  implementation functions, including private helpers, nested-module functions,
+  and test functions. Specifications describe parameters, results/effects,
+  required preconditions, and relevant errors or exceptions. Local helpers and
+  non-function values do not need redundant specifications.
+- **Placement and consistency:** a temporary audit using OCaml's parser checked
+  documentation attributes on 109 implementation/signature function bindings and
+  19 interface function declarations. It found no missing specifications and
+  confirmed matching text for corresponding public declarations, ignoring layout
+  whitespace. Documentation comments are separated from preceding declarations
+  where needed so that they attach to the intended function. No warning
+  suppression was added.
+- **Naming and decomposition:** functions and ordinary values use descriptive
+  snake_case names. Backtest now has private `observe`, `advance`, and `summarize`
+  helpers with explicit responsibilities. The public `run` operation, sealed
+  strategy state, accounting rules, and current-day-only observation boundary
+  retain their existing contracts.
+- **Sources:** the strategy algorithms and architecture follow the current course
+  materials. This review introduced no outside algorithm or adapted external
+  implementation requiring an additional source citation.
+- **Portable paths:** runtime code and tests contain no hardcoded home-directory
+  or workspace paths. Fixture names match the supplied files' capitalization and
+  use relative paths declared in `test/dune`. Temporary test files use Filename's
+  platform-aware temporary-file facility. The earlier `/tmp` command in the
+  milestone record describes a manual output location, not a required input or
+  test dependency.
+- **Build, formatting, and complete tests:** `dune build`,
+  `dune test --force`, and `ocamlformat --check` all passed.
+  All six OUnit executables ran to completion, with all 58 cases passing;
+  all three Cram files passed. A fresh source-only copy in another directory
+  also built and passed the complete suite, verifying portability without
+  relying on the original `_build` directory. Both builds produced no OCaml
+  compiler warnings.
+
+The course-specific guideline review is now complete using the supplied PDF.
+These changes document and clarify the required A2 implementation. Optional
+plotting additions and generated-documentation setup remain removed; required
+function specifications are retained. Package metadata is maintained directly
+in `a2.opam` so it lists only the assignment's dependencies and build targets.

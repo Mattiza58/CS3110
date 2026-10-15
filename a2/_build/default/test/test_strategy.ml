@@ -2,17 +2,28 @@ open OUnit2
 module Order = A2.Order
 module Strategy = A2.Strategy
 
+(** [get_ok result] extracts an [Ok] value or fails the OUnit assertion with the
+    message carried by [Error]. *)
 let get_ok = function
   | Ok value -> value
   | Error message -> assert_failure message
 
+(** [context ~cash ~options securities] is an initialization context for the
+    named header-order securities. Cash is positive integer cents; defaults are
+    1000 cents and no options. *)
 let context ?(cash = 1000) ?(options = []) securities : Strategy.init_context =
   { securities; initial_cash = cash; options }
 
+(** [observation ~cash ~holdings day prices] is a January 2024 observation for
+    [day], with current cent prices and whole-share holdings. Requires a valid
+    January day and a valid portfolio/price view; defaults are 1000 cents and no
+    holdings. *)
 let observation ?(cash = 1000) ?(holdings = []) day prices :
     Strategy.observation =
   { date = Printf.sprintf "2024-01-%02d" day; prices; cash; holdings }
 
+(** Checks exact hold-option validation for buy-and-hold and that Cash/Momentum
+    ignore irrelevant hold options. *)
 let option_validation_test _ =
   List.iter
     (fun options ->
@@ -29,11 +40,15 @@ let option_validation_test _ =
   ignore (get_ok (Strategy.Cash.init unrelated_hold));
   ignore (get_ok (Strategy.Momentum.init unrelated_hold))
 
+(** Checks the three required command-line strategy names exposed by the sealed
+    modules. *)
 let names_test _ =
   assert_equal "cash" Strategy.Cash.name;
   assert_equal "buy-and-hold" Strategy.Buy_and_hold.name;
   assert_equal "momentum" Strategy.Momentum.name
 
+(** Checks that Cash proposes no liquidation or other orders even when the
+    observation contains holdings. *)
 let cash_with_holdings_test _ =
   let state = get_ok (Strategy.Cash.init (context [ "A" ])) in
   let orders, _ =
@@ -42,6 +57,8 @@ let cash_with_holdings_test _ =
   in
   assert_equal [] orders
 
+(** Checks that buy-and-hold never retries an unaffordable first-date purchase
+    when a later price becomes affordable. *)
 let buy_unaffordable_test _ =
   let state =
     get_ok
@@ -56,6 +73,8 @@ let buy_unaffordable_test _ =
   in
   assert_equal [] orders
 
+(** Checks that a positive-gain tie uses initialization header order even when
+    observations list securities in another order. *)
 let momentum_header_tie_test _ =
   let state = get_ok (Strategy.Momentum.init (context [ "ZED"; "ALFA" ])) in
   let orders, state =
@@ -67,6 +86,7 @@ let momentum_header_tie_test _ =
   in
   assert_equal [ Order.Buy ("ZED", 5) ] orders
 
+(** Checks selection by absolute cent gain rather than percentage gain. *)
 let momentum_absolute_gain_test _ =
   let state =
     get_ok (Strategy.Momentum.init (context ~cash:2000 [ "A"; "B" ]))
@@ -81,6 +101,8 @@ let momentum_absolute_gain_test _ =
   in
   assert_equal [ Order.Buy ("B", 1) ] orders
 
+(** Checks that an unaffordable target is remembered through a decline and is
+    not retried on a later affordable increase. *)
 let momentum_unaffordable_target_test _ =
   let state =
     get_ok (Strategy.Momentum.init (context ~cash:100 [ "A"; "B" ]))
@@ -97,6 +119,8 @@ let momentum_unaffordable_target_test _ =
   let state = advance state 3 [ ("A", 50); ("B", 100) ] in
   ignore (advance state 4 [ ("A", 75); ("B", 100) ])
 
+(** Checks liquidation when a new target is unaffordable and retention of that
+    target after it becomes affordable. *)
 let momentum_unaffordable_switch_test _ =
   let state =
     get_ok (Strategy.Momentum.init (context ~cash:100 [ "A"; "B" ]))
@@ -126,6 +150,8 @@ let momentum_unaffordable_switch_test _ =
   in
   assert_equal [] orders
 
+(** Checks that previous prices update on declining days, so later gains compare
+    only with the immediately preceding row. *)
 let momentum_updates_previous_test _ =
   let state = get_ok (Strategy.Momentum.init (context [ "A"; "B" ])) in
   let _, state =
@@ -146,6 +172,8 @@ let momentum_updates_previous_test _ =
   in
   assert_equal [] orders
 
+(** Checks sales of every held security before a new-target purchase sized using
+    all sale proceeds and current cash. *)
 let momentum_liquidates_all_test _ =
   let state =
     get_ok (Strategy.Momentum.init (context ~cash:305 [ "Z"; "A"; "Q" ]))
@@ -165,6 +193,8 @@ let momentum_liquidates_all_test _ =
     [ Order.Sell ("Z", 2); Order.Sell ("A", 1); Order.Buy ("Q", 2) ]
     orders
 
+(** Checks deterministic replay and branching from earlier opaque states without
+    mutation of those states. *)
 let momentum_state_is_immutable_test _ =
   let initial = get_ok (Strategy.Momentum.init (context [ "A"; "B" ])) in
   let _, previous =

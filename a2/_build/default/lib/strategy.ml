@@ -3,6 +3,10 @@ type init_context = {
   initial_cash : int;
   options : (string * string) list;
 }
+(** Facts available before simulation. [securities] contains unique market names
+    in header order, [initial_cash] is positive integer cents, and [options]
+    uses option names without leading dashes (for example, [("hold", "ALFA")]).
+    No price rows are supplied during initialization. *)
 
 type observation = {
   date : string;
@@ -10,21 +14,39 @@ type observation = {
   cash : int;
   holdings : (string * int) list;
 }
+(** Only the current date's prices and portfolio view before orders execute. The
+    engine must supply dates sequentially, with every initialized security's
+    positive integer-cent price exactly once. Cash and whole-share holdings are
+    nonnegative; holding names are unique and belong to the market. *)
 
 module type S = sig
   type state
+  (** Private strategy state, carried between dates without inspection. *)
 
   val name : string
+  (** The command-line strategy name. *)
+
   val init : init_context -> (state, string) result
+  (** Validate strategy-specific options and construct the initial state. *)
+
   val step : state -> observation -> Order.t list * state
+  (** Propose orders in execution order and return the next state. The input
+      state is not mutated. Earlier information must be retained privately; no
+      other price rows or operations for retrieving them are available. *)
 end
 
 module Cash : S = struct
   type state = unit
 
   let name = "cash"
-  let init _ = Ok ()
-  let step state _ = ([], state)
+
+  (** [init context] returns a cash strategy's initial state. The general
+      [context] is unused, and no strategy-specific options are required. *)
+  let init _context = Ok ()
+
+  (** [step state observation] proposes no orders and preserves [state]. The
+      current-day [observation] does not affect the cash strategy. *)
+  let step state _observation = ([], state)
 end
 
 module Buy_and_hold : S = struct
@@ -34,6 +56,9 @@ module Buy_and_hold : S = struct
 
   let name = "buy-and-hold"
 
+  (** [init context] prepares a single first-date purchase of the security named
+      by the ["hold"] option. Returns an error if that option is absent or does
+      not exactly match a security in [context.securities]. *)
   let init context =
     match List.assoc_opt "hold" context.options with
     | None -> Error "Buy-and-hold requires --hold SYMBOL"
@@ -41,6 +66,10 @@ module Buy_and_hold : S = struct
         Error (Printf.sprintf "Unknown --hold security %S" security)
     | Some security -> Ok (Waiting security)
 
+  (** [step state observation] proposes the largest affordable whole-share
+      purchase on the first observation and no orders afterward, including when
+      no first-date share was affordable. Returns the next immutable state.
+      Requires a current observation satisfying the [observation] contract. *)
   let step state observation =
     match state with
     | Done -> ([], Done)
@@ -63,10 +92,16 @@ module Momentum : S = struct
 
   let name = "momentum"
 
+  (** [init context] returns momentum state with the header-order securities
+      from [context], no previous prices, and no target. No strategy-specific
+      options are required. *)
   let init (context : init_context) =
     Ok { securities = context.securities; previous = None; target = None }
 
-  (* Strict improvement preserves the first security in header order on ties. *)
+  (** [select_target securities previous prices] selects the largest strictly
+      positive cent increase from [previous] to [prices], or [None] if there is
+      none. Ties favor the first name in [securities]. Requires unique names in
+      header order and a price for each name in both price lists. *)
   let select_target securities previous prices =
     let target, _ =
       List.fold_left
@@ -80,6 +115,11 @@ module Momentum : S = struct
     in
     target
 
+  (** [switch_orders observation security] proposes sales of all positive
+      holdings followed by the largest whole-share purchase affordable with
+      current cash and sale proceeds. The purchase is omitted if unaffordable.
+      Requires a valid current [observation] that includes [security]'s price.
+  *)
   let switch_orders observation security =
     let sales =
       List.filter_map
@@ -99,6 +139,12 @@ module Momentum : S = struct
     in
     sales @ purchases
 
+  (** [step state observation] proposes default one-day momentum orders and
+      returns state remembering the current prices and retained/new target. The
+      first date only records prices. A changed positive-gain target causes a
+      full switch; no gain or an unchanged target causes no orders. Even an
+      unaffordable new target is remembered. Requires a current observation
+      satisfying the [observation] contract for the initialized securities. *)
   let step state observation =
     let orders, target =
       match state.previous with

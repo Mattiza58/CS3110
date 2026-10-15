@@ -1,3 +1,7 @@
+(** [render result] is the complete final summary, including strategy, period,
+    initial cash, final cash, positive holdings, final value, and percentage
+    return. Money and return have two decimal places. The string ends with a
+    newline. No I/O. *)
 let render (result : Backtest.t) =
   let holdings =
     Portfolio.holdings result.final_portfolio
@@ -29,6 +33,11 @@ let render (result : Backtest.t) =
     (Money.format result.final_value)
     result.total_return
 
+(** [write filename result] writes the exact [date,value] header and one row per
+    simulation date, in order, using the recorded post-order portfolio values.
+    Values have two decimal places with no dollar signs or separators. Returns
+    an error identifying the output file if it cannot be opened or written. An
+    existing output file is overwritten. *)
 let write filename (result : Backtest.t) =
   let rows =
     [ "date"; "value" ]

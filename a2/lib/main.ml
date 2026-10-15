@@ -1,3 +1,7 @@
+(** [simulate command market] runs the strategy selected by the validated
+    [command] on the loaded [market], using the command's initial cents and
+    options. Returns the completed result or an initialization/accounting error.
+    Performs no file or terminal I/O. *)
 let simulate (command : Command.t) market =
   let run =
     match command.strategy with
@@ -13,6 +17,10 @@ let simulate (command : Command.t) market =
   in
   run ~options:command.options market ~initial_cash:command.initial_cash
 
+(** [execute command] loads the requested market, runs the selected strategy,
+    and writes its equity CSV. Returns the complete summary on success or an
+    error message on failure. Requires a validated [command]. An existing output
+    file is overwritten only after loading and simulation succeed. *)
 let execute (command : Command.t) =
   match Market.load command.market_file with
   | Error message -> Error message
@@ -24,6 +32,10 @@ let execute (command : Command.t) =
           | Error message -> Error message
           | Ok () -> Ok (Report.render result)))
 
+(** [run ()] parses command-line arguments, loads the market, runs the selected
+    strategy, writes its equity CSV, and prints its complete summary. Errors are
+    reported on standard error with an unsuccessful exit status. Help exits
+    successfully before market or output files are opened. *)
 let run () =
   let command = Command.parse () in
   match execute command with

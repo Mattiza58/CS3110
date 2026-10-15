@@ -5,14 +5,22 @@ module Order = A2.Order
 module Portfolio = A2.Portfolio
 module Strategy = A2.Strategy
 
+(** [get_ok result] extracts an [Ok] value or fails the OUnit assertion with the
+    message carried by [Error]. *)
 let get_ok = function
   | Ok value -> value
   | Error message -> assert_failure message
 
+(** [run name init step ~options ~cash filename] loads a valid market and runs
+    the supplied sealed strategy operations, failing the assertion on an error.
+    Defaults are no options and 10000 initial cents. *)
 let run name init step ?(options = []) ?(cash = 10000) filename =
   let market = get_ok (Market.load filename) in
   get_ok (Backtest.run ~name ~init ~step ~options market ~initial_cash:cash)
 
+(** [snapshots result] returns chronological
+    date/cash/holdings/value/orders/outcome tuples for comparing completed
+    simulations. Holdings are sorted by name for stable comparison. *)
 let snapshots (result : Backtest.t) =
   List.map
     (fun (snapshot : Backtest.snapshot) ->
@@ -24,11 +32,16 @@ let snapshots (result : Backtest.t) =
         snapshot.outcomes ))
     result.history
 
+(** [assert_return expected actual] checks percentage returns with an absolute
+    tolerance below one billionth of a percentage point. *)
 let assert_return expected actual =
   assert_equal ~printer:string_of_float
     ~cmp:(fun a b -> abs_float (a -. b) < 1e-9)
     expected actual
 
+(** [with_market contents test] loads valid CSV [contents] from a temporary file
+    and passes the market to [test]. The temporary file is removed even if
+    parsing or the callback fails. *)
 let with_market contents test =
   let filename = Filename.temp_file "a2-backtest-" ".csv" in
   Fun.protect
@@ -47,12 +60,17 @@ module Reference : Strategy.S = struct
 
   let name = "accounting-reference"
 
+  (** [init context] asserts the expected security names, initial cents, and
+      marker option, then returns the first Accounting Reference step index. *)
   let init (context : Strategy.init_context) =
     assert_equal [ "ALFA"; "BETA" ] context.securities;
     assert_equal 10000 context.initial_cash;
     assert_equal [ ("marker", "checked") ] context.options;
     Ok 0
 
+  (** [step state observation] asserts the exact pre-order observation for the
+      current Accounting Reference index and returns its prescribed orders and
+      next index. Fails if called beyond the three expected dates. *)
   let step state (observation : Strategy.observation) =
     let date, prices, cash, holdings, orders =
       match state with
@@ -83,6 +101,9 @@ module Reference : Strategy.S = struct
     (orders, state + 1)
 end
 
+(** Checks all Accounting Reference observations, orders, outcomes, dated
+    states, final summary fields, and the six-percent return through the engine.
+*)
 let accounting_reference_test _ =
   let result =
     run Reference.name Reference.init Reference.step
@@ -126,8 +147,14 @@ module Rejections : Strategy.S = struct
   type state = int
 
   let name = "test-rejections"
+
+  (** [init context] returns the first scripted step index; the general
+      initialization context is unused. *)
   let init _ = Ok 0
 
+  (** [step state observation] proposes the rejection-test orders for the
+      current index and returns the next index. The observation is unused; later
+      indices produce no orders. *)
   let step state _ =
     let orders =
       match state with
@@ -150,6 +177,8 @@ module Rejections : Strategy.S = struct
     (orders, state + 1)
 end
 
+(** Checks all four rejection rules, continued later orders, dated portfolio
+    carry-forward, and the predicted final return. *)
 let rejections_test _ =
   let result =
     run Rejections.name Rejections.init Rejections.step "../data/handout.csv"
@@ -190,6 +219,10 @@ let rejections_test _ =
   assert_equal 10300 result.final_value;
   assert_return 3.0 result.total_return
 
+(** [funding_step reversed state observation] returns a fixed funding-test
+    script and incremented step index. Index zero buys ALFA; index one sells
+    ALFA then buys BETA, reversing that pair when [reversed] is true. Later
+    indices propose no orders. *)
 let funding_step reversed state _ =
   let orders =
     match state with
@@ -205,7 +238,13 @@ module Sale_first : Strategy.S = struct
   type state = int
 
   let name = "sale-first"
+
+  (** [init context] returns the first scripted step index; the general
+      initialization context is unused. *)
   let init _ = Ok 0
+
+  (** [step state observation] returns the funding-test script with a sale
+      followed by its funded purchase, together with the next script index. *)
   let step = funding_step false
 end
 
@@ -213,10 +252,18 @@ module Buy_first : Strategy.S = struct
   type state = int
 
   let name = "buy-first"
+
+  (** [init context] returns the first scripted step index; the general
+      initialization context is unused. *)
   let init _ = Ok 0
+
+  (** [step state observation] returns the funding-test script with a purchase
+      attempted before its funding sale, together with the next script index. *)
   let step = funding_step true
 end
 
+(** Checks that a sale funds a later purchase and that each recorded value uses
+    that date's prices after execution. *)
 let sale_funding_test _ =
   let result =
     run Sale_first.name Sale_first.init Sale_first.step "../data/handout.csv"
@@ -237,6 +284,9 @@ let sale_funding_test _ =
   assert_equal 12600 result.final_value;
   assert_return 26.0 result.total_return
 
+(** Checks that purchasing before the funding sale is rejected while the sale
+    still executes, producing the independently predicted final cash and return.
+*)
 let reversed_orders_test _ =
   let result =
     run Buy_first.name Buy_first.init Buy_first.step "../data/handout.csv"
@@ -250,6 +300,8 @@ let reversed_orders_test _ =
   assert_equal 12000 result.final_value;
   assert_return 20.0 result.total_return
 
+(** Checks first/final dates, one snapshot, exact leftover cash, final
+    holdings/value, and zero return for a one-date market. *)
 let single_date_test _ =
   with_market "date,A\n2024-01-02,10.00" (fun market ->
       let result =
@@ -267,6 +319,10 @@ let single_date_test _ =
       assert_equal 10005 result.final_value;
       assert_return 0.0 result.total_return)
 
+(** [fractional_return_test price expected_value expected_return] checks a
+    two-date buy-and-hold run with the supplied final dollar-price text and
+    independently predicted final cents and percentage return. Requires valid
+    positive two-decimal [price]. *)
 let fractional_return_test price expected_value expected_return _ =
   with_market
     ("date,A\n2024-01-02,3.00\n2024-01-03," ^ price ^ "\n")
@@ -288,12 +344,18 @@ module Never_initialized : Strategy.S = struct
 
   let name = "never-initialized"
 
+  (** [init context] always fails the assertion: the invalid-cash test requires
+      the engine to reject input before calling this sentinel initializer. *)
   let init _ =
     assert_failure "Initial cash must be checked before strategy init"
 
+  (** [step state observation] proposes no orders and preserves the sentinel
+      state; the observation is unused. *)
   let step state _ = ([], state)
 end
 
+(** Checks rejection of nonpositive initial cash before the engine calls
+    strategy initialization. *)
 let initial_cash_error_test _ =
   let market = get_ok (Market.load "../data/handout.csv") in
   List.iter
@@ -303,6 +365,8 @@ let initial_cash_error_test _ =
            ~step:Never_initialized.step market ~initial_cash))
     [ 0; -1 ]
 
+(** Checks propagation of missing/unknown hold-option errors with the selected
+    strategy identified. *)
 let initialization_error_test _ =
   let market = get_ok (Market.load "../data/handout.csv") in
   List.iter
@@ -318,6 +382,8 @@ let initialization_error_test _ =
       | Ok _ -> assert_failure "Expected strategy initialization error")
     [ []; [ ("hold", "MISSING") ] ]
 
+(** Checks that changing only the final price row changes later results while
+    preserving every earlier order, outcome, and portfolio snapshot. *)
 let future_prices_test _ =
   let original =
     run Strategy.Momentum.name Strategy.Momentum.init Strategy.Momentum.step
@@ -343,6 +409,8 @@ let future_prices_test _ =
       assert_bool "Later prices affect only later results"
         (original.final_value <> changed.final_value))
 
+(** Checks an unchanged cash portfolio, empty orders/outcomes, date range, and
+    return across the entire large historical market. *)
 let historical_cash_test _ =
   let result =
     run Strategy.Cash.name Strategy.Cash.init Strategy.Cash.step ~cash:1000000
@@ -361,6 +429,8 @@ let historical_cash_test _ =
     result.history;
   assert_return 0.0 result.total_return
 
+(** Checks that repeated Momentum runs initialize fresh state and reproduce all
+    dated results and the predicted negative return. *)
 let fresh_run_test _ =
   let first =
     run Strategy.Momentum.name Strategy.Momentum.init Strategy.Momentum.step

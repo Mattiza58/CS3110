@@ -5,17 +5,26 @@ module Order = A2.Order
 module Portfolio = A2.Portfolio
 module Strategy = A2.Strategy
 
+(** [get_ok result] extracts an [Ok] value or fails the OUnit assertion with the
+    message carried by [Error]. *)
 let get_ok = function
   | Ok value -> value
   | Error message -> assert_failure message
 
+(** [print_list print values] returns a bracketed, semicolon-separated
+    diagnostic string using [print] to render each value; it performs no output.
+*)
 let print_list print values =
   "[" ^ String.concat "; " (List.map print values) ^ "]"
 
+(** [print_holdings holdings] renders security/whole-share associations as a
+    diagnostic string without performing output. *)
 let print_holdings =
   print_list (fun (security, quantity) ->
       Printf.sprintf "%s=%d" security quantity)
 
+(** [print_orders orders] renders proposed buys and sells as a diagnostic string
+    without performing output. *)
 let print_orders =
   print_list (function
     | Order.Buy (security, quantity) ->
@@ -26,6 +35,13 @@ let print_orders =
 (* Expected orders, cash, holdings, and values below are independently
    worked-out literals. The helper only calls public interfaces and compares
    results; it does not calculate an expected trade or portfolio value. *)
+
+(** [check_run name init step ~options filename initial_cash expected] checks a
+    valid market run against a nonempty chronological list of independently
+    predicted date/order/cash/holdings/value tuples. Cash and values are cents.
+    Requires operations from the same sealed strategy module and positive
+    initial cents. Checks every dated field and final summary, failing with a
+    field/date diagnostic on a mismatch. *)
 let check_run name init step ?(options = []) filename initial_cash expected _ =
   let market = get_ok (Market.load filename) in
   let result =

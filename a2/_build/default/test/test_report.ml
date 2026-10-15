@@ -6,10 +6,14 @@ module Order = A2.Order
 module Report = A2.Report
 module Strategy = A2.Strategy
 
+(** [get_ok result] extracts an [Ok] value or fails the OUnit assertion with the
+    message carried by [Error]. *)
 let get_ok = function
   | Ok value -> value
   | Error message -> assert_failure message
 
+(** Checks accepted decimal amounts and rejection of malformed, signed,
+    whitespace-padded, or out-of-range money strings. *)
 let money_parsing_test _ =
   List.iter
     (fun (text, expected) ->
@@ -39,6 +43,8 @@ let money_parsing_test _ =
       "999999999999999999999999999.99";
     ]
 
+(** Checks exact nonnegative cent formatting and the documented exception for a
+    negative amount. *)
 let money_formatting_test _ =
   List.iter
     (fun (cents, expected) -> assert_equal expected (Money.format cents))
@@ -50,13 +56,21 @@ module Multiple_holdings : Strategy.S = struct
   type state = bool
 
   let name = "test-holdings"
+
+  (** [init context] returns an unspent first-date state for this test rule; the
+      general context is unused. *)
   let init _ = Ok false
 
+  (** [step done_buying observation] proposes one ZED and two ALFA shares on its
+      first call, then no orders. Returns a completed state; the observation is
+      unused. *)
   let step done_buying _ =
     if done_buying then ([], true)
     else ([ Order.Buy ("ZED", 1); Order.Buy ("ALFA", 2) ], true)
 end
 
+(** Checks the complete independently predicted summary, including sorted
+    multiple holdings, singular/plural share labels, exact cents, and return. *)
 let render_holdings_test _ =
   let market = get_ok (Market.load "../data/strategy-tiny.csv") in
   let result =

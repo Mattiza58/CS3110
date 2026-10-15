@@ -1,0 +1,4 @@
+(test
+ (name test_a1)
+ (libraries a1))
+(cram (deps ../bin/main.exe (glob_files_rec ../examples/*)))

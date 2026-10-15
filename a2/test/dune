@@ -1,0 +1,37 @@
+(test
+ (name test_a2)
+ (modules test_a2)
+ (libraries a2 ounit2)
+ (deps (glob_files ../data/*.csv)))
+
+(test
+ (name test_portfolio)
+ (modules test_portfolio)
+ (libraries a2 ounit2)
+ (deps ../data/handout.csv))
+
+(test
+ (name test_strategy)
+ (modules test_strategy)
+ (libraries a2 ounit2))
+
+(test
+ (name test_validation)
+ (modules test_validation)
+ (libraries a2 ounit2)
+ (deps ../data/handout.csv ../data/strategy-tiny.csv ../data/strategy-budget.csv))
+
+(test
+ (name test_backtest)
+ (modules test_backtest)
+ (libraries a2 ounit2)
+ (deps (glob_files ../data/*.csv)))
+
+(cram
+ (deps ../bin/main.exe (glob_files ../data/*.csv)))
+
+(test
+ (name test_report)
+ (modules test_report)
+ (libraries a2 ounit2)
+ (deps ../data/strategy-tiny.csv))
